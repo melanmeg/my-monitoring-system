@@ -1,0 +1,257 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mimir-bucket-secret
+  namespace: monitoring
+data:
+  AWS_ACCESS_KEY_ID: bWluaW8=
+  AWS_SECRET_ACCESS_KEY: bWluaW8xMjM=
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mimir-distributed
+  namespace: argocd
+spec:
+  project: cluster-wide-apps
+  source:
+    chart: mimir-distributed
+    repoURL: https://grafana.github.io/helm-charts
+    targetRevision: 5.5.0-weekly.308
+    helm:
+      releaseName: mimir-distributed
+      values: |
+        # Ingesters will only create 2h sized blocks.
+
+        # ref: https://grafana.com/docs/helm-charts/mimir-distributed/latest/run-production-environment-with-helm/
+        global:
+          extraEnvFrom:
+            - secretRef:
+                name: mimir-bucket-secret
+          podAnnotations:
+            bucketSecretVersion: "0"
+        mimir:
+          structuredConfig:
+            limits:
+              # err-mimir-sample-out-of-order. ref: https://grafana.com/docs/mimir/latest/configure/configure-out-of-order-samples-ingestion/
+              out_of_order_time_window: 5m
+              # ref: https://grafana.com/docs/mimir/latest/configure/configure-metrics-storage-retention/
+              compactor_blocks_retention_period: 10d
+            common:
+              storage:
+                backend: s3
+                s3:
+                  endpoint: minio.minio:9000
+                  region: eu-west-1
+                  access_key_id: ${AWS_ACCESS_KEY_ID}
+                  secret_access_key: ${AWS_SECRET_ACCESS_KEY}
+                  insecure: true
+                  http:
+                    insecure_skip_verify: true
+            blocks_storage:
+              s3:
+                bucket_name: k8s-blocks
+            alertmanager_storage:
+              s3:
+                bucket_name: k8s-alertmanager
+            ruler_storage:
+              s3:
+                bucket_name: k8s-ruler
+
+        # ref: small.yaml
+        alertmanager:
+          persistentVolume:
+            enabled: true
+          replicas: 2
+          resources:
+            limits:
+              memory: 1Gi
+            requests:
+              cpu: 0.5
+              memory: 512Mi
+          statefulSet:
+            enabled: true
+
+        compactor:
+          persistentVolume:
+            storageClass: "nfs-share"
+            accessMode: ReadWriteOnce
+            size: 20Gi
+          resources:
+            limits:
+              memory: 2Gi
+            requests:
+              cpu: 0.5
+              memory: 512Mi
+
+        distributor:
+          replicas: 2
+          resources:
+            limits:
+              memory: 3Gi
+            requests:
+              cpu: 0.5
+              memory: 1Gi
+
+        ingester:
+          persistentVolume:
+            storageClass: "nfs-share"
+            accessMode: ReadWriteOnce
+            size: 20Gi
+          replicas: 2
+          resources:
+            limits:
+              memory: 2Gi
+            requests:
+              cpu: 0.5
+              memory: 512Mi
+          topologySpreadConstraints: {}
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchExpressions:
+                      - key: target # support for enterprise.legacyLabels
+                        operator: In
+                        values:
+                          - ingester
+                  topologyKey: "kubernetes.io/hostname"
+
+                - labelSelector:
+                    matchExpressions:
+                      - key: app.kubernetes.io/component
+                        operator: In
+                        values:
+                          - ingester
+                  topologyKey: "kubernetes.io/hostname"
+
+          zoneAwareReplication:
+            topologyKey: "kubernetes.io/hostname"
+
+        admin-cache:
+          enabled: true
+          replicas: 2
+
+        chunks-cache:
+          enabled: true
+          replicas: 1
+          allocatedMemory: 2024
+          resources:
+            limits:
+              cpu: 2
+              memory: 2Gi
+            requests:
+              cpu: 0.5
+              memory: 512Mi
+
+        index-cache:
+          enabled: true
+          replicas: 2
+
+        metadata-cache:
+          enabled: true
+
+        results-cache:
+          enabled: true
+          replicas: 2
+
+        minio:
+          enabled: false
+
+        overrides_exporter:
+          replicas: 1
+          resources:
+            limits:
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+
+        querier:
+          replicas: 1
+          resources:
+            limits:
+              memory: 3Gi
+            requests:
+              cpu: 1
+              memory: 1Gi
+
+        query_frontend:
+          replicas: 1
+          resources:
+            limits:
+              memory: 2Gi
+            requests:
+              cpu: 1
+              memory: 1Gi
+
+        ruler:
+          replicas: 1
+          resources:
+            limits:
+              memory: 2Gi
+            requests:
+              cpu: 0.5
+              memory: 1Gi
+
+        store_gateway:
+          persistentVolume:
+            storageClass: "nfs-share"
+            accessMode: ReadWriteOnce
+            size: 10Gi
+          replicas: 2
+          resources:
+            limits:
+              memory: 2Gi
+            requests:
+              cpu: 0.25
+              memory: 512Mi
+          topologySpreadConstraints: {}
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchExpressions:
+                      - key: target # support for enterprise.legacyLabels
+                        operator: In
+                        values:
+                          - store-gateway
+                  topologyKey: "kubernetes.io/hostname"
+
+                - labelSelector:
+                    matchExpressions:
+                      - key: app.kubernetes.io/component
+                        operator: In
+                        values:
+                          - store-gateway
+                  topologyKey: "kubernetes.io/hostname"
+          zoneAwareReplication:
+            topologyKey: "kubernetes.io/hostname"
+
+        nginx:
+          replicas: 1
+          resources:
+            limits:
+              memory: 731Mi
+            requests:
+              cpu: 0.5
+              memory: 256Mi
+
+        gateway:
+          replicas: 1
+          resources:
+            limits:
+              memory: 731Mi
+            requests:
+              cpu: 0.5
+              memory: 256Mi
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
