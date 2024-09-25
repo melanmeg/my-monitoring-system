@@ -31,4 +31,16 @@ my-monitoring-system 2版
 　・pyroscope: プロファイル、ebpf
 セキュリティ
 　・Falco ※暫定
+フィーチャーフラグ
+　・Unleash
+　・openfeature
+　　・flagd
+　　・open-feature-operator
+カオスエンジニアリング
+　・chaos mesh
+ライフサイクルオーケストレーション
+　・keptn
+拡張CD
+　・flux
+
 ```
