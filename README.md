@@ -2,9 +2,13 @@
 my-monitoring-system 2版
 
 - いつかやりたい用
+- メモ）検証用なので、mimir, loki, minio, pyroscope辺りはリソースの関係から分散は辞めたい
 
 ```bash
 # 構想
+ダッシュボード
+  ・grafana
+  ・kiali
 ネットワーク
 　・cilium: ネットワーク制御
   　- hubble: メトリクス
@@ -26,6 +30,4 @@ my-monitoring-system 2版
 　・pyroscope: プロファイル、ebpf
 セキュリティ
 　・Falco ※暫定
-エラー監視
-　・sentry
 ```
