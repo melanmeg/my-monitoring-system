@@ -1,5 +1,6 @@
 # my-monitoring-system-2
 my-monitoring-system 2版
+### ※未工事
 
 - いつかやりたい用
 - メモ）検証用なので、mimir, loki, minio, pyroscope辺りはリソースの関係から分散は辞めたい
